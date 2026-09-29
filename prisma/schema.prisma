@@ -1,0 +1,82 @@
+// Prisma Schema for NEXO Merchant API
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PaymentMethod {
+  DEBIT
+  CREDIT_1
+  CREDIT_3
+  QR
+}
+
+enum TransactionStatus {
+  PENDING
+  SETTLED
+  FAILED
+}
+
+enum SettlementStatus {
+  PENDING
+  COMPLETED
+}
+
+model Merchant {
+  id               String        @id @default(uuid())
+  businessName     String        @map("business_name")
+  cuit             String        @unique
+  email            String        @unique
+  availableBalance Decimal       @default(0.00) @map("available_balance") @db.Decimal(12, 2)
+  pendingBalance   Decimal       @default(0.00) @map("pending_balance") @db.Decimal(12, 2)
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  transactions     Transaction[]
+  settlements      Settlement[]
+
+  @@map("merchants")
+}
+
+model Transaction {
+  id             String            @id @default(uuid())
+  merchantId     String            @map("merchant_id")
+  amountGross    Decimal           @map("amount_gross") @db.Decimal(12, 2)
+  paymentMethod  PaymentMethod     @map("payment_method")
+  status         TransactionStatus @default(PENDING)
+  idempotencyKey String            @unique @map("idempotency_key")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  merchant       Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  settlement     Settlement?
+
+  @@index([merchantId])
+  @@index([status])
+  @@map("transactions")
+}
+
+model Settlement {
+  id                  String           @id @default(uuid())
+  transactionId       String           @unique @map("transaction_id")
+  merchantId          String           @map("merchant_id")
+  amountNet           Decimal          @map("amount_net") @db.Decimal(12, 2)
+  feeApplied          Decimal          @map("fee_applied") @db.Decimal(12, 2)
+  taxApplied          Decimal          @map("tax_applied") @db.Decimal(12, 2)
+  scheduledPayoutDate DateTime         @map("scheduled_payout_date")
+  status              SettlementStatus @default(PENDING)
+  createdAt           DateTime         @default(now()) @map("created_at")
+
+  transaction         Transaction      @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  merchant            Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([scheduledPayoutDate])
+  @@index([status])
+  @@map("settlements")
+}
